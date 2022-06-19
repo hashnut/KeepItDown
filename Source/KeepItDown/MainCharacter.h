@@ -22,7 +22,7 @@ enum class EWeaponType : uint8
 {
 	EWT_Unarmed UMETA(DisplayName = "Unarmed"),
 	EWT_Knife UMETA(DisplayName = "Knife"),
-	EWT_Pistol UMETA(DisplayName = "Pistol"),
+	EWT_Gun UMETA(DisplayName = "Gun"),
 
 	EWT_MAX UMETA(DisplayName = "DefaultMAX")
 };
@@ -80,15 +80,18 @@ protected:
 
 	void CalculateCrosshairSpread(float DeltaTime);
 
-	void EquipKnife();
-	void EquipPistol();
-	
 	UFUNCTION()
 	/* Line trace for items under the crosshairs */
 	bool TraceUnderCrosshairs(FHitResult& OutHitResult, FVector& OutEndLocation);
 
 	/* Trace for items if OverlappedItemCount > 0 */
 	void TraceForItems();
+
+	void EquipKnife();
+	void EquipGun();
+	
+	/* Press E to interact with objects */
+	void Interact();
 
 public:	
 	// Called every frame
@@ -207,7 +210,13 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	AItem* TraceHitItem;
 
+	/* Distance outward from camera for the interp destination */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Items, meta = (AllowPrivateAccess = "true"))
+	float CameraInterpDistance;
 
+	/* Distance upward from camera for the interp destination */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Items, meta = (AllowPrivateAccess = "true"))
+	float CameraInterpElevation;
 
 public:
 	/** Returns FirstPersonCameraComponent subobject **/

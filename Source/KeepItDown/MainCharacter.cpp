@@ -39,6 +39,9 @@ AMainCharacter::AMainCharacter() :
 	CurrentWeaponType(EWeaponType::EWT_Unarmed),
 	// Item Trace variables
 	bShouldTraceForItems(false),
+	// CameraInterpLocation
+	CameraInterpDistance(250.f),
+	CameraInterpElevation(65.f),
 	OverlappedItemCount(0)
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -109,9 +112,12 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	PlayerInputComponent->BindAction("AimingButton", IE_Pressed, this, &AMainCharacter::AimingButtonPressed);
 	PlayerInputComponent->BindAction("AimingButton", IE_Released, this, &AMainCharacter::AimingButtonReleased);
 
-	// Equip knife and pistol
+	// Equip knife and gun
 	PlayerInputComponent->BindAction("Knife", IE_Pressed, this, &AMainCharacter::EquipKnife);
-	PlayerInputComponent->BindAction("Pistol", IE_Pressed, this, &AMainCharacter::EquipPistol);
+	PlayerInputComponent->BindAction("Gun", IE_Pressed, this, &AMainCharacter::EquipGun);
+
+	// Interact with objects
+	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AMainCharacter::Interact);
 
 	// Run
 	PlayerInputComponent->BindAction("Run", IE_Pressed, this, &AMainCharacter::StartRunning);
@@ -146,13 +152,11 @@ void AMainCharacter::IncrementOverlappedItemCount(int8 Amount)
 
 FVector AMainCharacter::GetCameraInterpLocation()
 {
-	//const FVector CameraWorldLocation{ FirstPersonCamera->GetComponentLocation() };
-	//const FVector CameraForward{ FirstPersonCamera->GetForwardVector() };
-	//// Desired = CameraWorldLocation + Forward * A + Up * B
-	//return CameraWorldLocation + CameraForward * CameraInterpDistance
-	//	+ FVector(0.f, 0.f, CameraInterpElevation);
-
-	return FVector(0.f, 0.f, 0.f);
+	const FVector CameraWorldLocation{ FirstPersonCamera->GetComponentLocation() };
+	const FVector CameraForward{ FirstPersonCamera->GetForwardVector() };
+	// Desired = CameraWorldLocation + Forward * A + Up * B
+	return CameraWorldLocation + CameraForward * CameraInterpDistance
+		+ FVector(0.f, 0.f, CameraInterpElevation);
 }
 
 void AMainCharacter::GetPickupItem(AItem* Item)
@@ -164,18 +168,25 @@ void AMainCharacter::GetPickupItem(AItem* Item)
 		TraceHitItem = nullptr;
 		TraceHitItemLastFrame = nullptr;
 
-		if (Weapon->GetClass()->GetName() == TEXT("AGun"))
+		UE_LOG(LogTemp, Warning, TEXT("Name of the Weapon class : %s"), *(Weapon->GetClass()->GetName()));
+
+		if (Weapon->GetClass()->GetName().StartsWith(TEXT("Gun")))
 		{
-			MainGun = Cast<AGun>(Weapon);
+			// Downcasting can cause errors?
+			MainGun = Cast<AGun>(Weapon); 
+
 		}
-		else if (Weapon->GetClass()->GetName() == TEXT("AKnife"))
+		else if (Weapon->GetClass()->GetName().StartsWith(TEXT("Knife")))
 		{
 			MainKnife = Cast<AKnife>(Weapon);
 		}
 		else
 		{
-			checkf(false, TEXT("Weird weapon class other than AGun and AKnife"));
+			UE_LOG(LogTemp, Warning, TEXT("Weird weapon class other than Gun and Knife"));
 		}
+
+		// Vanish WeaponToEquip
+		Weapon->SetItemState(EItemState::EIS_Equipped);
 	}
 }
 
@@ -224,7 +235,7 @@ void AMainCharacter::LookUp(float Value)
 
 void AMainCharacter::StartRunning()
 {
-	if (CurrentWeaponType != EWeaponType::EWT_Pistol)
+	if (CurrentWeaponType != EWeaponType::EWT_Gun)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = 750.f;
 	}
@@ -292,17 +303,36 @@ void AMainCharacter::EquipKnife()
 	{
 		CurrentWeaponType = EWeaponType::EWT_Knife;
 	}
+
+	if (MainKnife)
+	{
+
+	}
 }
 
-void AMainCharacter::EquipPistol()
+void AMainCharacter::EquipGun()
 {
-	if (CurrentWeaponType == EWeaponType::EWT_Pistol)
+	if (CurrentWeaponType == EWeaponType::EWT_Gun)
 	{
 		CurrentWeaponType = EWeaponType::EWT_Unarmed;
 	}
 	else
 	{
-		CurrentWeaponType = EWeaponType::EWT_Pistol;
+		CurrentWeaponType = EWeaponType::EWT_Gun;
+	}
+}
+
+void AMainCharacter::Interact()
+{
+	UE_LOG(LogTemp, Warning, TEXT("TraceHitItem Called!"));
+
+	if (TraceHitItem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TraceHitItem Succeeded!"));
+		TraceHitItem->StartItemCurve(this);
+
+		//auto TraceHitWeapon = Cast<AWeapon>(TraceHitItem);
+		//SwapWeapon(TraceHitWeapon);
 	}
 }
 

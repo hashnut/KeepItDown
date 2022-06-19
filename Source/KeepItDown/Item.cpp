@@ -111,7 +111,7 @@ void AItem::SetItemProperties(EItemState State)
 		// Set mesh properties
 		ItemMesh->SetSimulatePhysics(false);
 		ItemMesh->SetEnableGravity(false);
-		ItemMesh->SetVisibility(true);
+		ItemMesh->SetVisibility(false);
 		ItemMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 		ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		// Set AreaSphere properties
