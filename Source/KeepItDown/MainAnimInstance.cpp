@@ -49,22 +49,22 @@ void UMainAnimInstance::UpdateAnimationProperties(float DeltaTime)
 
 		bAiming = MainCharacter->GetAiming();
 
-		FString RotationMessage = FString::Printf(
-			TEXT("Base Aim Ro tation: %f"),
-			AimRotation.Yaw);
+		//FString RotationMessage = FString::Printf(
+		//	TEXT("Base Aim Rotation: %f"),
+		//	AimRotation.Yaw);
 
-		FString MovementRotationMessage = FString::Printf(
-			TEXT("MovementRotation: %f"), 
-			MovementRotation.Yaw);
+		//FString MovementRotationMessage = FString::Printf(
+		//	TEXT("MovementRotation: %f"), 
+		//	MovementRotation.Yaw);
 
-		FString OffsetMessage = FString::Printf(
-			TEXT("Movement Offset Yaw: %f"),
-			AimRotation.Yaw);
+		//FString OffsetMessage = FString::Printf(
+		//	TEXT("Movement Offset Yaw: %f"),
+		//	AimRotation.Yaw);
 
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White, OffsetMessage);
-		}
+		//if (GEngine)
+		//{
+		//	GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White, OffsetMessage);
+		//}
 	}
 }
 
