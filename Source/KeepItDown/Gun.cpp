@@ -7,9 +7,10 @@ AGun::AGun() :
 	MagazineCapacity(13),
 	GunType(EGunType::EGT_Pistol),
 	AmmoType(EAmmoType::EAT_Pistol),
-	ReloadMontageSection(FName(TEXT("Reload Pistol")))
+	ReloadMontageSection(FName(TEXT("StartReload")))
 {
 	PrimaryActorTick.bCanEverTick = true;
+	ItemCategory = EItemCategory::EIC_Gun;
 }
 
 void AGun::Tick(float DeltaTime)

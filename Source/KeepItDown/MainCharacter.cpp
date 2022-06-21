@@ -11,6 +11,11 @@
 #include "Gun.h"
 #include "Knife.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/SkeletalMeshSocket.h"
+#include "Sound/SoundCue.h"
+#include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
+#include "Particles/ParticleSystemComponent.h"
 
 
 // Sets default values
@@ -42,7 +47,24 @@ AMainCharacter::AMainCharacter() :
 	// CameraInterpLocation
 	CameraInterpDistance(250.f),
 	CameraInterpElevation(65.f),
-	OverlappedItemCount(0)
+	OverlappedItemCount(0),
+	// Crosshair spread factors
+	CrosshairSpreadMultiplier(0.f),
+	CrosshairVelocityFactor(0.f),
+	CrosshairInAirFactor(0.f),
+	CrosshairAimFactor(0.f),
+	CrosshairShootingFactor(0.f),
+	// Bullet fire timer variables
+	ShootTimeDuration(0.05f),
+	bFiringBullet(false),
+	// Automatic fire variables
+	AutomaticFireRate(1.f),
+	bShouldFire(true),
+	bAttackButtonPressed(false),
+	StartingPistolAmmo(13),
+	StartingARAmmo(130),
+	// Combat variables
+	CombatState(ECombatState::ECS_Unoccupied)
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -80,7 +102,7 @@ void AMainCharacter::BeginPlay()
 		CameraCurrentFOV = CameraDefaultFOV;
 	}
 
-
+	InitializeAmmoMap();
 }
 
 // Called every frame
@@ -93,6 +115,9 @@ void AMainCharacter::Tick(float DeltaTime)
 
 	// Change look sensitivity based on aiming
 	SetLookRates();
+
+	// Calculate crosshair spread multiplier
+	CalculateCrosshairSpread(DeltaTime);
 
 	// Check OverlappedItemCount, then trace for items
 	TraceForItems();
@@ -119,6 +144,13 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	// Interact with objects
 	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AMainCharacter::Interact);
 
+	//PlayerInputComponent->BindAction("Attack", IE_Pressed, this, &AMainCharacter::Attack);
+	PlayerInputComponent->BindAction("Attack", IE_Pressed, this, &AMainCharacter::AttackButtonPressed);
+	PlayerInputComponent->BindAction("Attack", IE_Released, this, &AMainCharacter::AttackButtonReleased);
+
+	// Reload Weapon
+	PlayerInputComponent->BindAction("ReloadButton", IE_Pressed, this, &AMainCharacter::ReloadButtonPressed);
+
 	// Run
 	PlayerInputComponent->BindAction("Run", IE_Pressed, this, &AMainCharacter::StartRunning);
 	PlayerInputComponent->BindAction("Run", IE_Released, this, &AMainCharacter::EndRunning);
@@ -134,6 +166,46 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	PlayerInputComponent->BindAxis("TurnRate", this, &AMainCharacter::TurnAtRate);
 	PlayerInputComponent->BindAxis("LookUp", this, &APawn::AddControllerPitchInput);
 	PlayerInputComponent->BindAxis("LookUpRate", this, &AMainCharacter::LookUpAtRate);
+}
+
+void AMainCharacter::FinishReloading()
+{
+	// Update the Combat State
+	CombatState = ECombatState::ECS_Unoccupied;
+
+	if (MainGun == nullptr) return;
+
+	const auto AmmoType{ MainGun->GetAmmoType() };
+
+	// Update the AmmoMap
+	if (AmmoMap.Contains(AmmoType))
+	{
+		// Amount of ammo the Character is carrying of the EquippedWeapon type
+		int32 CarriedAmmo = AmmoMap[AmmoType];
+
+		// Space left in the magazine of EquippedWeapon
+		const int32 MagEmptySpace = MainGun->GetMagazineCapacity() - MainGun->GetAmmo();
+
+		if (MagEmptySpace > CarriedAmmo)
+		{
+			// Reload the magazine with all the ammo we are caryying
+			MainGun->ReloadAmmo(CarriedAmmo);
+			CarriedAmmo = 0;
+			AmmoMap.Add(AmmoType, CarriedAmmo);
+		}
+		else
+		{
+			// fill the magazine
+			MainGun->ReloadAmmo(MagEmptySpace);
+			CarriedAmmo -= MagEmptySpace;
+			AmmoMap.Add(AmmoType, CarriedAmmo);
+		}
+	}
+}
+
+float AMainCharacter::GetCrosshairSpreadMultipllier() const
+{
+	return CrosshairSpreadMultiplier;
 }
 
 void AMainCharacter::IncrementOverlappedItemCount(int8 Amount)
@@ -161,32 +233,38 @@ FVector AMainCharacter::GetCameraInterpLocation()
 
 void AMainCharacter::GetPickupItem(AItem* Item)
 {
-	auto Weapon = Cast<AItem>(Item);
-	if (Weapon)
+	/*auto Weapon = Cast<AItem>(Item);*/
+	if (Item)
 	{
 		//SwapWeapon(Weapon);
 		TraceHitItem = nullptr;
 		TraceHitItemLastFrame = nullptr;
 
-		UE_LOG(LogTemp, Warning, TEXT("Name of the Weapon class : %s"), *(Weapon->GetClass()->GetName()));
-
-		if (Weapon->GetClass()->GetName().StartsWith(TEXT("Gun")))
+		UE_LOG(LogTemp, Warning, TEXT("Name of the Weapon class : %s"), *(Item->GetClass()->GetName()));
+		
+		// if (Weapon->GetClass()->GetName().StartsWith(TEXT("Gun")))
+		if (Item->GetItemCategory() == EItemCategory::EIC_Gun)
 		{
 			// Downcasting can cause errors?
-			MainGun = Cast<AGun>(Weapon); 
-
+			//MainGun = Cast<AGun>(Weapon);
+			MainGun = Cast<AGun>(Item);
 		}
-		else if (Weapon->GetClass()->GetName().StartsWith(TEXT("Knife")))
+		else if (Item->GetItemCategory() == EItemCategory::EIC_Knife)
 		{
-			MainKnife = Cast<AKnife>(Weapon);
+			//MainKnife = Cast<AKnife>(Weapon);
+			MainKnife = Cast<AKnife>(Item);
+		}
+		else if (Item->GetItemCategory() == EItemCategory::EIC_Ammo)
+		{
+			// TODO : Add Ammo
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Weird weapon class other than Gun and Knife"));
+			UE_LOG(LogTemp, Warning, TEXT("Weird weapon class other than Gun, Knife and Ammo"));
 		}
 
 		// Vanish WeaponToEquip
-		Weapon->SetItemState(EItemState::EIS_Equipped);
+		Item->SetItemState(EItemState::EIS_Obtained);
 	}
 }
 
@@ -288,37 +366,365 @@ void AMainCharacter::SetLookRates()
 	}
 }
 
+bool AMainCharacter::GetBeamEndLocation(const FVector& MuzzleSocketLocation, FVector& OutBeamLocation)
+{
+	FHitResult CrosshairHitResult;
+	bool bCrosshairHit = TraceUnderCrosshairs(CrosshairHitResult, OutBeamLocation);
+
+	if (bCrosshairHit)
+	{
+		// Tentative beam location - still need to trace from gun
+		OutBeamLocation = CrosshairHitResult.Location;
+	}
+	else // no crosshair trace hit
+	{
+		// OutBeamLocation is the End location for the line trace
+	}
+
+	// Perform a second trace, this time from the gun barrel
+	FHitResult WeaponTraceHit;
+	const FVector WeaponTraceStart{ MuzzleSocketLocation };
+	const FVector StartToEnd{ OutBeamLocation - MuzzleSocketLocation };
+	const FVector WeaponTraceEnd{ MuzzleSocketLocation + StartToEnd * 1.25f };
+	GetWorld()->LineTraceSingleByChannel(
+		WeaponTraceHit,
+		WeaponTraceStart,
+		WeaponTraceEnd,
+		ECollisionChannel::ECC_Visibility);
+	if (WeaponTraceHit.bBlockingHit) // Object between barrel and BeamEndPoint?
+	{
+		OutBeamLocation = WeaponTraceHit.Location;
+		return true;
+	}
+	return false;
+}
+
 void AMainCharacter::CalculateCrosshairSpread(float DeltaTime)
 {
+	FVector2D WalkSpeedRange{ 0.f, 750.f };
+	FVector2D VelocityMultiplierRange{ 0.f, 1.f };
+	FVector Velocity{ GetVelocity() };
+	Velocity.Z = 0.f;
 
+	// Calculate crosshair velocity factor
+	CrosshairVelocityFactor = FMath::GetMappedRangeValueClamped(
+		WalkSpeedRange,
+		VelocityMultiplierRange,
+		Velocity.Size());
+
+	// Calculate crosshair in air factor
+	if (GetCharacterMovement()->IsFalling()) // is in air?
+	{
+		// Spread the crosshairs slowly while in air
+		CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 2.25f, DeltaTime, 2.25f);
+	}
+	else // Character is on the ground
+	{
+		// Shrink the crosshairs rapidly while on the ground
+		CrosshairInAirFactor = FMath::FInterpTo(CrosshairInAirFactor, 0.f, DeltaTime, 30.f);
+	}
+
+	// Calculate crosshair aim factor
+	if (bAiming) // Are we aiming?
+	{
+		// Shrink crosshairs a small amount very quickly
+		CrosshairAimFactor = FMath::FInterpTo(
+			CrosshairAimFactor,
+			0.6f,
+			DeltaTime,
+			30.f);
+	}
+	else // Not aiming
+	{
+		// Spread back to normal very quickly
+		CrosshairAimFactor = FMath::FInterpTo(
+			CrosshairAimFactor,
+			0.f,
+			DeltaTime,
+			30.f);
+	}
+
+	// True 0.0f second after firing
+	if (bFiringBullet)
+	{
+		CrosshairShootingFactor = FMath::FInterpTo(
+			CrosshairShootingFactor,
+			0.3f,
+			DeltaTime,
+			60.f);
+	}
+	else
+	{
+		CrosshairShootingFactor = FMath::FInterpTo(
+			CrosshairShootingFactor,
+			0.f,
+			DeltaTime,
+			60.f
+		);
+	}
+
+	CrosshairSpreadMultiplier =
+		0.5f +
+		CrosshairVelocityFactor +
+		CrosshairInAirFactor -
+		CrosshairAimFactor +
+		CrosshairShootingFactor;
+}
+
+void AMainCharacter::StartCrosshairBulletFire()
+{
+	bFiringBullet = true;
+
+	GetWorldTimerManager().SetTimer(
+		CrosshairShootTimer,
+		this,
+		&AMainCharacter::FinishCrosshairBulletFire,
+		ShootTimeDuration);
+}
+
+void AMainCharacter::FinishCrosshairBulletFire()
+{
+	bFiringBullet = false;
+}
+
+void AMainCharacter::AttackButtonPressed()
+{
+	bAttackButtonPressed = true;
+	Attack();
+}
+
+void AMainCharacter::AttackButtonReleased()
+{
+	bAttackButtonPressed = false;
+}
+
+void AMainCharacter::StartFireTimer()
+{
+	CombatState = ECombatState::ECS_FireTimerInProgress;
+
+	GetWorldTimerManager().SetTimer(
+		AutoFireTimer,
+		this,
+		&AMainCharacter::AutoFireReset,
+		AutomaticFireRate);
+}
+
+void AMainCharacter::AutoFireReset()
+{
+	CombatState = ECombatState::ECS_Unoccupied;
+
+	if (WeaponHasAmmo())
+	{
+		if (bAttackButtonPressed)
+		{
+			FireWeapon();
+		}
+	}
+	else
+	{
+		// Reload Weapon
+		ReloadWeapon();
+	}
+}
+
+void AMainCharacter::InitializeAmmoMap()
+{
+	AmmoMap.Add(EAmmoType::EAT_Pistol, StartingPistolAmmo);
+	AmmoMap.Add(EAmmoType::EAT_AR, StartingARAmmo);
+}
+
+bool AMainCharacter::WeaponHasAmmo()
+{
+	if (MainGun == nullptr) return false;
+
+	return MainGun->GetAmmo() > 0;
+}
+
+void AMainCharacter::PlayFireSound()
+{
+	// Play fire sound
+	if (FireSound)
+	{
+		UGameplayStatics::PlaySound2D(this, FireSound);
+	}
+}
+
+void AMainCharacter::SendBullet()
+{
+	// Send bullet
+	const USkeletalMeshSocket* BarrelSocket = MainGun->GetItemMesh()->GetSocketByName("MuzzleFlash");
+	if (BarrelSocket)
+	{
+		const FTransform SocketTransform = BarrelSocket->GetSocketTransform(MainGun->GetItemMesh());
+
+		if (MuzzleFlash)
+		{
+			UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFlash, SocketTransform);
+		}
+
+		FVector BeamEnd;
+		bool bBeamEnd = GetBeamEndLocation(
+			SocketTransform.GetLocation(),
+			BeamEnd);
+		if (bBeamEnd)
+		{
+			if (ImpactParticles)
+			{
+				UGameplayStatics::SpawnEmitterAtLocation(
+					GetWorld(),
+					ImpactParticles,
+					BeamEnd);
+			}
+
+			UParticleSystemComponent* Beam = UGameplayStatics::SpawnEmitterAtLocation(
+				GetWorld(),
+				BeamParticles,
+				SocketTransform);
+
+			if (Beam)
+			{
+				Beam->SetVectorParameter(FName("Target"), BeamEnd);
+			}
+
+		}
+	}
+}
+
+void AMainCharacter::PlayPistolFireMontage()
+{
+	// Play Pistol Fire Montage
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && PistolFireMontage)
+	{
+		AnimInstance->Montage_Play(PistolFireMontage);
+		AnimInstance->Montage_JumpToSection(FName("StartFire"));
+	}
+}
+
+void AMainCharacter::PlaySlashSound()
+{
+	// Play slash sound
+	if (SlashSound)
+	{
+		UGameplayStatics::PlaySound2D(this, SlashSound);
+	}
+}
+
+void AMainCharacter::PlayKnifeSlashMontage()
+{
+	// Play Knife Slash Montage
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && KnifeSlashMontage)
+	{
+		AnimInstance->Montage_Play(KnifeSlashMontage);
+		AnimInstance->Montage_JumpToSection(FName("StartSlash"));
+	}
+}
+
+void AMainCharacter::ReloadButtonPressed()
+{
+	ReloadWeapon();
+}
+
+void AMainCharacter::ReloadWeapon()
+{
+	if (CombatState != ECombatState::ECS_Unoccupied) return;
+
+	// Do we have ammo of the correct type?
+	// TODO : Check if current ammo is full (== MagazineCapacity)
+	if (CarryingAmmo())
+	{
+		CombatState = ECombatState::ECS_Reloading;
+
+		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+		if (AnimInstance && ReloadMontage)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Reload Montage is called"));
+
+			AnimInstance->Montage_Play(ReloadMontage);
+			AnimInstance->Montage_JumpToSection(MainGun->GetReloadMontageSection());
+		}
+	}
+}
+
+bool AMainCharacter::CarryingAmmo()
+{
+	if (MainGun == nullptr) return false;
+
+	auto AmmoType = MainGun->GetAmmoType();
+
+	if (AmmoMap.Contains(AmmoType))
+	{
+		return AmmoMap[AmmoType] > 0;
+	}
+
+	return false;
 }
 
 void AMainCharacter::EquipKnife()
 {
-	if (CurrentWeaponType == EWeaponType::EWT_Knife)
-	{
-		CurrentWeaponType = EWeaponType::EWT_Unarmed;
-	}
-	else
-	{
-		CurrentWeaponType = EWeaponType::EWT_Knife;
-	}
-
 	if (MainKnife)
 	{
+		if (CurrentWeaponType == EWeaponType::EWT_Unarmed)
+		{
+			CurrentWeaponType = EWeaponType::EWT_Knife;
 
+			// Attach Knife to KnifeSocket
+			AttachKnife();
+		}
+		else if (CurrentWeaponType == EWeaponType::EWT_Knife)
+		{
+			CurrentWeaponType = EWeaponType::EWT_Unarmed;
+			
+			// Detach Knife from KnifeSocket
+			DetachKnife();
+		}
+		else if (CurrentWeaponType == EWeaponType::EWT_Gun)
+		{
+			CurrentWeaponType = EWeaponType::EWT_Knife;
+
+			// Detach Gun from GunSocket
+			DetachGun();
+
+			// Attach Knife to KnifeSocket
+			AttachKnife();
+		}
 	}
 }
 
 void AMainCharacter::EquipGun()
 {
-	if (CurrentWeaponType == EWeaponType::EWT_Gun)
+	if (MainGun)
 	{
-		CurrentWeaponType = EWeaponType::EWT_Unarmed;
-	}
-	else
-	{
-		CurrentWeaponType = EWeaponType::EWT_Gun;
+		if (CurrentWeaponType == EWeaponType::EWT_Unarmed)
+		{
+			CurrentWeaponType = EWeaponType::EWT_Gun;
+
+			UE_LOG(LogTemp, Warning, TEXT("Attach Gun!"));
+
+			// Attach Gun to PistolSocket
+			AttachGun();
+		}
+		else if (CurrentWeaponType == EWeaponType::EWT_Knife)
+		{
+			CurrentWeaponType = EWeaponType::EWT_Gun;
+
+			UE_LOG(LogTemp, Warning, TEXT("Detach Knife!"));
+			// Detach Knife from KnifeSocket
+			DetachKnife();
+
+			UE_LOG(LogTemp, Warning, TEXT("Attach Gun!"));
+			// Attach Gun to PistolSocket
+			AttachGun();
+		}
+		else if (CurrentWeaponType == EWeaponType::EWT_Gun)
+		{
+			CurrentWeaponType = EWeaponType::EWT_Unarmed;
+
+			UE_LOG(LogTemp, Warning, TEXT("Detach Gun!"));
+			// Detach Gun from GunSocket
+			DetachGun();
+		}
 	}
 }
 
@@ -334,6 +740,94 @@ void AMainCharacter::Interact()
 		//auto TraceHitWeapon = Cast<AWeapon>(TraceHitItem);
 		//SwapWeapon(TraceHitWeapon);
 	}
+}
+
+void AMainCharacter::AttachKnife()
+{
+	if (MainKnife)
+	{
+		const USkeletalMeshSocket* KnifeSocket = GetMesh()->GetSocketByName(
+			FName("KnifeSocket"));
+		if (KnifeSocket)
+		{
+			KnifeSocket->AttachActor(MainKnife, GetMesh());
+		}
+		MainKnife->SetItemState(EItemState::EIS_Equipped);
+	}
+}
+
+void AMainCharacter::DetachKnife()
+{
+	if (MainKnife)
+	{
+		FDetachmentTransformRules DetachmentTransformRules(EDetachmentRule::KeepWorld, true);
+		MainKnife->GetItemMesh()->DetachFromComponent(DetachmentTransformRules);
+		MainKnife->SetItemState(EItemState::EIS_Obtained);
+	}
+}
+
+void AMainCharacter::AttachGun()
+{
+	if (MainGun)
+	{
+		const USkeletalMeshSocket* PistolSocket = GetMesh()->GetSocketByName(
+			FName("PistolSocket"));
+		if (PistolSocket)
+		{
+			PistolSocket->AttachActor(MainGun, GetMesh());
+		}
+		MainGun->SetItemState(EItemState::EIS_Equipped);
+	}
+}
+
+void AMainCharacter::DetachGun()
+{
+	if (MainGun)
+	{
+		FDetachmentTransformRules DetachmentTransformRules(EDetachmentRule::KeepWorld, true);
+		MainGun->GetItemMesh()->DetachFromComponent(DetachmentTransformRules);
+		MainGun->SetItemState(EItemState::EIS_Obtained);
+	}
+}
+
+void AMainCharacter::Attack()
+{
+	if (CurrentWeaponType == EWeaponType::EWT_Unarmed) return;
+	if (CombatState != ECombatState::ECS_Unoccupied) return;
+
+	if (CurrentWeaponType == EWeaponType::EWT_Gun)
+	{
+		FireWeapon();
+	}
+	else if (CurrentWeaponType == EWeaponType::EWT_Knife)
+	{
+		SlashKnife();
+	}
+
+}
+
+void AMainCharacter::FireWeapon()
+{
+	if (WeaponHasAmmo())
+	{
+		PlayFireSound();
+		SendBullet();
+		PlayPistolFireMontage();
+
+		// Start bullet fire timer for crosshairs
+		// StartCrosshairBulletFire();
+
+		// Subtract 1 from the Weapon's Ammo
+		MainGun->DecrementAmmo();
+
+		StartFireTimer();
+	}
+}
+
+void AMainCharacter::SlashKnife()
+{
+	PlaySlashSound();
+	PlayKnifeSlashMontage();
 }
 
 bool AMainCharacter::TraceUnderCrosshairs(FHitResult& OutHitResult, FVector& OutHitLocation)

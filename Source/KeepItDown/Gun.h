@@ -16,6 +16,7 @@ enum class EGunType : uint8
 {
 	EGT_Pistol UMETA(DisplayName = "Pistol"),
 	EGT_Rifle UMETA(DisplayName = "AssaultRifle"),
+	EGT_Knife UMETA(DisplayName = "Knife"),
 
 	EGT_MAX UMETA(DisplayName = "DefaultMAX")
 };

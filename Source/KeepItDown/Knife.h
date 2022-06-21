@@ -14,4 +14,6 @@ class KEEPITDOWN_API AKnife : public AItem
 {
 	GENERATED_BODY()
 	
+public:
+	AKnife();
 };

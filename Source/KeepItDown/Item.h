@@ -10,12 +10,22 @@ UENUM(BlueprintType)
 enum class EItemState : uint8
 {
 	EIS_Pickup UMETA(DisplayName = "Pickup"),
-	EIS_EquipInterping UMETA(DisplayName = "EquipInterping"),
+	EIS_Obtained UMETA(DisplayName = "Obtained"),
 	EIS_PickedUp UMETA(DisplayName = "PickedUp"),
 	EIS_Equipped UMETA(DisplayName = "Equipped"),
 	EIS_Falling UMETA(DisplayName = "Falling"),
 
 	EIS_MAX UMETA(DisplayName = "DefaultMAX")
+};
+
+UENUM(BlueprintType)
+enum class EItemCategory : uint8
+{
+	EIC_Knife UMETA(DisplayName = "Knife"),
+	EIC_Gun UMETA(DisplayName = "Gun"),
+	EIC_Ammo UMETA(DisplayName = "Ammo"),
+
+	EIC_MAX UMETA(DisplayName = "DefaultMAX")
 };
 
 UCLASS()
@@ -57,6 +67,9 @@ protected:
 
 	/* Handles item interpolation when in the EquipInterping state */
 	void ItemInterp(float DeltaTime);
+
+	/* Category of item (Knife, Gun, Ammo) */
+	EItemCategory ItemCategory;
 
 public:
 	// Called every frame
@@ -139,4 +152,6 @@ public:
 
 	/* Called from the AMainCharacter class */
 	void StartItemCurve(AMainCharacter* Char);
+
+	FORCEINLINE EItemCategory GetItemCategory() const { return ItemCategory; }
 };

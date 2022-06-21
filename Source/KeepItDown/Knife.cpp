@@ -3,3 +3,7 @@
 
 #include "Knife.h"
 
+AKnife::AKnife()
+{
+	ItemCategory = EItemCategory::EIC_Knife;
+}

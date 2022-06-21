@@ -106,7 +106,7 @@ void AItem::SetItemProperties(EItemState State)
 			ECollisionResponse::ECR_Block);
 		CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		break;
-	case EItemState::EIS_Equipped:
+	case EItemState::EIS_Obtained:
 		PickupWidget->SetVisibility(false);
 		// Set mesh properties
 		ItemMesh->SetSimulatePhysics(false);
@@ -137,7 +137,7 @@ void AItem::SetItemProperties(EItemState State)
 		CollisionBox->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 		CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		break;
-	case EItemState::EIS_EquipInterping:
+	case EItemState::EIS_Equipped:
 		PickupWidget->SetVisibility(false);
 		// Set mesh properties
 		ItemMesh->SetSimulatePhysics(false);
@@ -245,7 +245,7 @@ void AItem::StartItemCurve(AMainCharacter* Char)
 	// Store initial location of the Item
 	ItemInterpStartLocation = GetActorLocation();
 	bInterping = true;
-	SetItemState(EItemState::EIS_EquipInterping);
+	SetItemState(EItemState::EIS_Equipped);
 
 	GetWorldTimerManager().SetTimer(
 		ItemInterpTimer,
