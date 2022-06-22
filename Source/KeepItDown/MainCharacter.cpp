@@ -89,6 +89,14 @@ AMainCharacter::AMainCharacter() :
 	GetCharacterMovement()->JumpZVelocity = 600.f;
 	GetCharacterMovement()->AirControl = 0.2f;
 
+	// Make Mesh1P children of FirstPersonCamera
+	Mesh1P = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh1P"));
+	Mesh1P->SetupAttachment(FirstPersonCamera);
+	//static ConstructorHelpers::FObjectFinder<USkeletalMesh> SK_ARMS(TEXT("/Game/FirstPerson/Character/Mesh/SK_Mannequin_Arms.SK_Mannequin_Arms"));
+	//if (SK_ARMS.Succeeded())
+	//{
+	//	Mesh1P->SetSkeletalMesh(SK_ARMS.Object);
+	//}
 }
 
 // Called when the game starts or when spawned
@@ -201,6 +209,14 @@ void AMainCharacter::FinishReloading()
 			AmmoMap.Add(AmmoType, CarriedAmmo);
 		}
 	}
+}
+
+void AMainCharacter::FinishSlashing()
+{
+	// Update the Combat State
+	CombatState = ECombatState::ECS_Unoccupied;
+
+	if (MainKnife == nullptr) return;
 }
 
 float AMainCharacter::GetCrosshairSpreadMultipllier() const
@@ -593,11 +609,27 @@ void AMainCharacter::SendBullet()
 void AMainCharacter::PlayPistolFireMontage()
 {
 	// Play Pistol Fire Montage
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
 	if (AnimInstance && PistolFireMontage)
 	{
 		AnimInstance->Montage_Play(PistolFireMontage);
 		AnimInstance->Montage_JumpToSection(FName("StartFire"));
+	}
+}
+
+void AMainCharacter::PlayClickSound()
+{
+	if (ClickSound)
+	{
+		UGameplayStatics::PlaySound2D(this, ClickSound);
+	}
+}
+
+void AMainCharacter::PlayReloadSound()
+{
+	if (ReloadSound)
+	{
+		UGameplayStatics::PlaySound2D(this, ReloadSound);
 	}
 }
 
@@ -613,7 +645,7 @@ void AMainCharacter::PlaySlashSound()
 void AMainCharacter::PlayKnifeSlashMontage()
 {
 	// Play Knife Slash Montage
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
 	if (AnimInstance && KnifeSlashMontage)
 	{
 		AnimInstance->Montage_Play(KnifeSlashMontage);
@@ -636,7 +668,9 @@ void AMainCharacter::ReloadWeapon()
 	{
 		CombatState = ECombatState::ECS_Reloading;
 
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+		PlayReloadSound();
+
+		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
 		if (AnimInstance && ReloadMontage)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Reload Montage is called"));
@@ -746,11 +780,11 @@ void AMainCharacter::AttachKnife()
 {
 	if (MainKnife)
 	{
-		const USkeletalMeshSocket* KnifeSocket = GetMesh()->GetSocketByName(
+		const USkeletalMeshSocket* KnifeSocket = Mesh1P->GetSocketByName(
 			FName("KnifeSocket"));
 		if (KnifeSocket)
 		{
-			KnifeSocket->AttachActor(MainKnife, GetMesh());
+			KnifeSocket->AttachActor(MainKnife, Mesh1P);
 		}
 		MainKnife->SetItemState(EItemState::EIS_Equipped);
 	}
@@ -770,11 +804,11 @@ void AMainCharacter::AttachGun()
 {
 	if (MainGun)
 	{
-		const USkeletalMeshSocket* PistolSocket = GetMesh()->GetSocketByName(
+		const USkeletalMeshSocket* PistolSocket = Mesh1P->GetSocketByName(
 			FName("PistolSocket"));
 		if (PistolSocket)
 		{
-			PistolSocket->AttachActor(MainGun, GetMesh());
+			PistolSocket->AttachActor(MainGun, Mesh1P);
 		}
 		MainGun->SetItemState(EItemState::EIS_Equipped);
 	}
@@ -822,10 +856,16 @@ void AMainCharacter::FireWeapon()
 
 		StartFireTimer();
 	}
+	else
+	{
+		PlayClickSound();
+	}
 }
 
 void AMainCharacter::SlashKnife()
 {
+	CombatState = ECombatState::ECS_SlashTimerInProgress;
+
 	PlaySlashSound();
 	PlayKnifeSlashMontage();
 }

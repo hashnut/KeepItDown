@@ -130,7 +130,10 @@ protected:
 	void PlayFireSound();
 	void SendBullet();
 	void PlayPistolFireMontage();
+	void PlayClickSound();
+	void PlayReloadSound();
 
+	/* KnifeSlash Functions */
 	void PlaySlashSound();
 	void PlayKnifeSlashMontage();
 
@@ -154,6 +157,10 @@ private:
 	/** First person camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* FirstPersonCamera;
+
+	/* Skeletal Mesh for First Person Character (Arms) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	class USkeletalMeshComponent* Mesh1P;
 
 	/* Camera boom positioning the ThirdPersonCamera behind the character */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
@@ -210,6 +217,14 @@ private:
 	/* Randomized gunshot sound cue */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	class USoundCue* FireSound;
+
+	/* Clicking sound when there is no ammo */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	class USoundCue* ClickSound;
+
+	/* Reloading sound when reloading */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	class USoundCue* ReloadSound;
 
 	/* Flash Spawned at the barrel */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
@@ -352,6 +367,9 @@ private:
 
 	UFUNCTION(BlueprintCallable)
 	void FinishReloading();
+
+	UFUNCTION(BlueprintCallable)
+	void FinishSlashing();
 
 public:
 	/** Returns FirstPersonCameraComponent subobject **/
