@@ -14,6 +14,7 @@ enum class ECombatState : uint8
 	ECS_FireTimerInProgress UMETA(DisplayName = "FireTimerInProgress"),
 	ECS_Reloading UMETA(DisplayName = "Reloading"),
 	ECS_SlashTimerInProgress UMETA(DisplayName = "SlashTimerInProgress"),
+	ECS_HoldBreath UMETA(DisplayName = "HoldBreath"),
 
 	ECS_MAX UMETA(DisplayName = "DefaultMAX")
 };
@@ -24,6 +25,7 @@ enum class EWeaponType : uint8
 	EWT_Unarmed UMETA(DisplayName = "Unarmed"),
 	EWT_Knife UMETA(DisplayName = "Knife"),
 	EWT_Gun UMETA(DisplayName = "Gun"),
+	EWT_HoldBreath UMETA(DisplayName = "HoldBreath"),
 
 	EWT_MAX UMETA(DisplayName = "DefaultMAX")
 };
@@ -40,6 +42,9 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+
+	virtual void Jump() override;
+	virtual void StopJumping() override;
 
 	void MoveForward(float Value);
 	void MoveRight(float Value);
@@ -102,6 +107,9 @@ protected:
 	void FireWeapon();
 	void SlashKnife();
 
+	void StartHoldBreath();
+	void FinishHoldBreath();
+
 	bool GetBeamEndLocation(const FVector& MuzzleSocketLocation, FVector& OutBeamLocation);
 	void CalculateCrosshairSpread(float DeltaTime);
 
@@ -137,14 +145,28 @@ protected:
 	void PlaySlashSound();
 	void PlayKnifeSlashMontage();
 
+	UFUNCTION(BlueprintCallable)
+	void FinishSlashing();
+
 	/* Bound to the R key and Gamepad Face Button Left */
 	void ReloadButtonPressed();
 
 	/* Handle reloading of the weapon */
 	void ReloadWeapon();
 
+	UFUNCTION(BlueprintCallable)
+	void FinishReloading();
+
 	/* Checks to see if we have ammo of the EquippedWeapon's ammo type */
 	bool CarryingAmmo();
+
+	/* Holding breath functions */
+	void PlayStartHoldBreathSound();
+	void PlayEndHoldBreathSound();
+
+	void ManageStamina(float DeltaTime);
+	void IncrementStamina(float DeltaTime);
+	void DecrementStamina(float DeltaTime);
 
 public:	
 	// Called every frame
@@ -365,11 +387,31 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	UAnimMontage* ReloadMontage;
 
-	UFUNCTION(BlueprintCallable)
-	void FinishReloading();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	float MaxStamina;
 
-	UFUNCTION(BlueprintCallable)
-	void FinishSlashing();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	float MinStamina;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	float CurrentStamina;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	bool bIsRunning;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	bool bIsHoldingBreath;
+
+	/* Press HoldBreath button again when stamina is MinStamina */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	bool bShouldHoldBreathAgain;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	USoundCue* HoldBreathStartSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Stamina, meta = (AllowPrivateAccess = "true"))
+	USoundCue* HoldBreathEndSound;
+
 
 public:
 	/** Returns FirstPersonCameraComponent subobject **/
@@ -390,4 +432,7 @@ public:
 	FVector GetCameraInterpLocation();
 
 	void GetPickupItem(AItem* Item);
+
+	UFUNCTION(BlueprintCallable)
+	AItem* GetCurrentWeapon() { return CurrentWeapon; }
 };

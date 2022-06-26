@@ -58,13 +58,21 @@ AMainCharacter::AMainCharacter() :
 	ShootTimeDuration(0.05f),
 	bFiringBullet(false),
 	// Automatic fire variables
-	AutomaticFireRate(1.f),
+	AutomaticFireRate(0.8f),
 	bShouldFire(true),
 	bAttackButtonPressed(false),
 	StartingPistolAmmo(13),
 	StartingARAmmo(130),
 	// Combat variables
-	CombatState(ECombatState::ECS_Unoccupied)
+	CombatState(ECombatState::ECS_Unoccupied),
+	// Stamina Variables
+	bIsRunning(false),
+	bIsHoldingBreath(false),
+	bShouldHoldBreathAgain(false),
+	// Set default stamina to MAX
+	MaxStamina(10.f),
+	MinStamina(0.f),
+	CurrentStamina(10.f)
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -113,6 +121,20 @@ void AMainCharacter::BeginPlay()
 	InitializeAmmoMap();
 }
 
+void AMainCharacter::Jump()
+{
+	if (CurrentWeaponType == EWeaponType::EWT_HoldBreath) return;
+
+	Super::Jump();
+}
+
+void AMainCharacter::StopJumping()
+{
+	if (CurrentWeaponType == EWeaponType::EWT_HoldBreath) return;
+
+	Super::StopJumping();
+}
+
 // Called every frame
 void AMainCharacter::Tick(float DeltaTime)
 {
@@ -129,6 +151,10 @@ void AMainCharacter::Tick(float DeltaTime)
 
 	// Check OverlappedItemCount, then trace for items
 	TraceForItems();
+
+	// Check manage stamina (HoldBreath / Running)
+	ManageStamina(DeltaTime);
+
 }
 
 // Called to bind functionality to input
@@ -138,8 +164,8 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	check(PlayerInputComponent);
 
 	// Bind jump events
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
-	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AMainCharacter::Jump);
+	PlayerInputComponent->BindAction("Jump", IE_Released, this, &AMainCharacter::StopJumping);
 
 	// Aiming events
 	PlayerInputComponent->BindAction("AimingButton", IE_Pressed, this, &AMainCharacter::AimingButtonPressed);
@@ -162,6 +188,10 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	// Run
 	PlayerInputComponent->BindAction("Run", IE_Pressed, this, &AMainCharacter::StartRunning);
 	PlayerInputComponent->BindAction("Run", IE_Released, this, &AMainCharacter::EndRunning);
+
+	// HoldBreath
+	PlayerInputComponent->BindAction("HoldBreath", IE_Pressed, this, &AMainCharacter::StartHoldBreath);
+	PlayerInputComponent->BindAction("HoldBreath", IE_Released, this, &AMainCharacter::FinishHoldBreath);
 
 	// Bind movement events
 	PlayerInputComponent->BindAxis("MoveForward", this, &AMainCharacter::MoveForward);
@@ -217,6 +247,48 @@ void AMainCharacter::FinishSlashing()
 	CombatState = ECombatState::ECS_Unoccupied;
 
 	if (MainKnife == nullptr) return;
+}
+
+void AMainCharacter::ManageStamina(float DeltaTime)
+{
+	if (/*!bIsRunning && */!bIsHoldingBreath)
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("Increase Stamina"));
+		IncrementStamina(DeltaTime);
+	}
+	else
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("Decrease Stamina"));
+		if (CurrentStamina <= MinStamina && CombatState == ECombatState::ECS_HoldBreath)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("StartHoldBreath -> Stamina all used up"));
+
+			CombatState = ECombatState::ECS_Unoccupied;
+			CurrentWeaponType = EWeaponType::EWT_Unarmed;
+
+			bIsHoldingBreath = false;
+			bShouldHoldBreathAgain = false;
+
+			PlayEndHoldBreathSound();
+		}
+
+		DecrementStamina(DeltaTime);
+	}
+}
+
+void AMainCharacter::IncrementStamina(float DeltaTime)
+{
+	CurrentStamina = FMath::Clamp<float>(CurrentStamina + DeltaTime, MinStamina, MaxStamina);
+	//UE_LOG(LogTemp, Warning, TEXT("DeltaTime : %f"), DeltaTime);
+	//UE_LOG(LogTemp, Warning, TEXT("CurrentStamina : %f"), CurrentStamina);
+}
+
+void AMainCharacter::DecrementStamina(float DeltaTime)
+{
+	CurrentStamina = FMath::Clamp<float>(CurrentStamina - DeltaTime, MinStamina, MaxStamina);
+
+	//UE_LOG(LogTemp, Warning, TEXT("DeltaTime : %f"), DeltaTime);
+	//UE_LOG(LogTemp, Warning, TEXT("CurrentStamina : %f"), CurrentStamina);
 }
 
 float AMainCharacter::GetCrosshairSpreadMultipllier() const
@@ -329,14 +401,20 @@ void AMainCharacter::LookUp(float Value)
 
 void AMainCharacter::StartRunning()
 {
+	// Cannot run while holding breath
+	if (CombatState == ECombatState::ECS_HoldBreath) return;
+
+	// Cannot run when using pistol
 	if (CurrentWeaponType != EWeaponType::EWT_Gun)
 	{
+		bIsRunning = true;
 		GetCharacterMovement()->MaxWalkSpeed = 750.f;
 	}
 }
 
 void AMainCharacter::EndRunning()
 {
+	bIsRunning = false;
 	GetCharacterMovement()->MaxWalkSpeed = 500.f;
 }
 
@@ -695,6 +773,71 @@ bool AMainCharacter::CarryingAmmo()
 	return false;
 }
 
+void AMainCharacter::StartHoldBreath()
+{
+	if (CombatState != ECombatState::ECS_Unoccupied) return;
+	if (CurrentWeaponType != EWeaponType::EWT_Unarmed) return;
+
+	UE_LOG(LogTemp, Warning, TEXT("StartHoldBreath Called"));
+
+	if (CurrentStamina > MinStamina && bShouldHoldBreathAgain == false)
+	{
+		if (bIsHoldingBreath == false)
+		{
+			PlayStartHoldBreathSound();
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("StartHoldBreath -> Change States"));
+
+		CombatState = ECombatState::ECS_HoldBreath;
+		CurrentWeaponType = EWeaponType::EWT_HoldBreath;
+
+		bIsHoldingBreath = true;
+	}
+	//else // if (CurrentStamina <= MinStamina || bShouldHoldBreathAgain == false)
+	//{
+	//	UE_LOG(LogTemp, Warning, TEXT("StartHoldBreath -> Stamina all used up"));
+
+	//	CombatState = ECombatState::ECS_Unoccupied;
+	//	CurrentWeaponType = EWeaponType::EWT_Unarmed;
+
+	//	bIsHoldingBreath = false;
+	//	bShouldHoldBreathAgain = true;
+
+	//	PlayEndHoldBreathSound();
+	//}
+}
+
+void AMainCharacter::FinishHoldBreath()
+{
+	if (CombatState != ECombatState::ECS_HoldBreath) return;
+	if (CurrentWeaponType != EWeaponType::EWT_HoldBreath) return;
+
+	CombatState = ECombatState::ECS_Unoccupied;
+	CurrentWeaponType = EWeaponType::EWT_Unarmed;
+
+	bIsHoldingBreath = false;
+	bShouldHoldBreathAgain = false;
+
+	PlayEndHoldBreathSound();
+}
+
+void AMainCharacter::PlayStartHoldBreathSound()
+{
+	if (HoldBreathStartSound)
+	{
+		UGameplayStatics::PlaySound2D(this, HoldBreathStartSound);
+	}
+}
+
+void AMainCharacter::PlayEndHoldBreathSound()
+{
+	if (HoldBreathEndSound)
+	{
+		UGameplayStatics::PlaySound2D(this, HoldBreathEndSound);
+	}
+}
+
 void AMainCharacter::EquipKnife()
 {
 	if (MainKnife)
@@ -705,6 +848,7 @@ void AMainCharacter::EquipKnife()
 
 			// Attach Knife to KnifeSocket
 			AttachKnife();
+			CurrentWeapon = MainKnife;
 		}
 		else if (CurrentWeaponType == EWeaponType::EWT_Knife)
 		{
@@ -712,6 +856,7 @@ void AMainCharacter::EquipKnife()
 			
 			// Detach Knife from KnifeSocket
 			DetachKnife();
+			CurrentWeapon = nullptr;
 		}
 		else if (CurrentWeaponType == EWeaponType::EWT_Gun)
 		{
@@ -722,6 +867,7 @@ void AMainCharacter::EquipKnife()
 
 			// Attach Knife to KnifeSocket
 			AttachKnife();
+			CurrentWeapon = MainKnife;
 		}
 	}
 }
@@ -738,6 +884,7 @@ void AMainCharacter::EquipGun()
 
 			// Attach Gun to PistolSocket
 			AttachGun();
+			CurrentWeapon = MainGun;
 		}
 		else if (CurrentWeaponType == EWeaponType::EWT_Knife)
 		{
@@ -750,6 +897,7 @@ void AMainCharacter::EquipGun()
 			UE_LOG(LogTemp, Warning, TEXT("Attach Gun!"));
 			// Attach Gun to PistolSocket
 			AttachGun();
+			CurrentWeapon = MainGun;
 		}
 		else if (CurrentWeaponType == EWeaponType::EWT_Gun)
 		{
@@ -758,6 +906,7 @@ void AMainCharacter::EquipGun()
 			UE_LOG(LogTemp, Warning, TEXT("Detach Gun!"));
 			// Detach Gun from GunSocket
 			DetachGun();
+			CurrentWeapon = nullptr;
 		}
 	}
 }

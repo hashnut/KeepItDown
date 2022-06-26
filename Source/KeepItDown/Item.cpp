@@ -10,7 +10,9 @@
 
 // Sets default values
 AItem::AItem() :
-	ItemName(FString("Default")),
+	ItemName(FString("Pistol")),
+	ItemButton(1),
+	ItemMemo(FString("Make Every Bullet Counts...")),
 	ItemCount(0),
 	ItemState(EItemState::EIS_Pickup),
 	// Item interp variables

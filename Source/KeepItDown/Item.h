@@ -96,6 +96,18 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Properties", meta = (AllowPrivateAccess = "true"))
 	FString ItemName;
 
+	/* The Icon which appears on the Pickup Widget */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Properties", meta = (AllowPrivateAccess = "true"))
+	UTexture2D* ItemIconTexture;
+
+	/* The ItemButton which appears on the Pickup Widget */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Properties", meta = (AllowPrivateAccess = "true"))
+	uint8 ItemButton;
+
+	/* The memo which appears on the Pickup Widget */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Properties", meta = (AllowPrivateAccess = "true"))
+	FString ItemMemo;
+
 	/* Item count (ammo, etc) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Properties", meta = (AllowPrivateAccess = "true"))
 	int32 ItemCount;
@@ -154,4 +166,5 @@ public:
 	void StartItemCurve(AMainCharacter* Char);
 
 	FORCEINLINE EItemCategory GetItemCategory() const { return ItemCategory; }
+
 };
